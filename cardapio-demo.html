@@ -1,0 +1,1004 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Chapa & Brasa — Cardápio Digital</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+
+<!-- Firebase (necessário pra pedidos aparecerem ao vivo na cozinha) -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+
+<style>
+  :root{
+    --red: #B23A2E;
+    --red-deep: #8E2B21;
+    --mustard: #E8A93B;
+    --mustard-deep: #C98B24;
+    --paper: #FAFAF8;
+    --bg: #F1EDE6;
+    --ink: #2B211D;
+    --ink-soft: #6B5F58;
+    --line: #E3DCD3;
+    --green: #4A7A5E;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    line-height: 1.4;
+    overflow-x: hidden;
+  }
+  .device{
+    max-width: 430px;
+    margin: 0 auto;
+    min-height: 100vh;
+    background: var(--bg);
+    position: relative;
+    padding-bottom: 90px;
+  }
+
+  /* ---- Config badge (só pra deixar claro no demo que é reaproveitável) ---- */
+  .demo-tag{
+    background: var(--ink);
+    color: var(--paper);
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 11px;
+    text-align:center;
+    padding: 6px;
+    letter-spacing: 0.04em;
+  }
+
+  /* ---- Top bar ---- */
+  .topbar{
+    background: var(--red);
+    color: var(--paper);
+    padding: 20px 20px 26px;
+    position: relative;
+    overflow:hidden;
+  }
+  .topbar::after{
+    content:"";
+    position:absolute; right:-30px; bottom:-40px;
+    width:140px; height:140px;
+    background: var(--red-deep);
+    border-radius: 50%;
+    opacity:0.5;
+  }
+  .topbar-row{
+    display:flex; align-items:center; justify-content:space-between;
+    position:relative; z-index:1;
+  }
+  .logo-mark{
+    width:40px; height:40px; border-radius:10px;
+    background: var(--mustard);
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px;
+  }
+  .badge{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12px;
+    background: rgba(255,255,255,0.15);
+    padding: 5px 10px;
+    border-radius: 20px;
+  }
+  .restaurant-name{
+    font-family:'Anton', sans-serif;
+    font-size: 34px;
+    letter-spacing: 0.01em;
+    margin: 14px 0 2px;
+    position:relative; z-index:1;
+  }
+  .restaurant-sub{
+    font-size: 13px;
+    opacity: 0.85;
+    position:relative; z-index:1;
+  }
+  .my-orders-btn{
+    display:none;
+    align-items:center; justify-content:space-between;
+    margin: 14px 16px 0;
+    background: var(--paper);
+    border: 1.5px solid var(--ink);
+    color: var(--ink);
+    padding: 12px 14px;
+    border-radius: 12px;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .my-orders-btn .count-chip{
+    background: var(--red); color: var(--paper);
+    width:20px; height:20px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size: 11px; font-family:'IBM Plex Mono', monospace;
+  }
+
+  .order-list-card{
+    display:flex; align-items:center; justify-content:space-between;
+    background: var(--paper); border:1px solid var(--line);
+    border-radius: 12px; padding: 14px; margin-bottom:10px;
+    cursor:pointer;
+  }
+  .order-list-card .num{ font-family:'IBM Plex Mono', monospace; font-weight:700; font-size:16px; }
+  .order-list-card .when{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+  .order-list-status{
+    font-size: 11.5px; font-weight:700; padding: 5px 10px; border-radius:20px;
+  }
+  .order-list-status.novo{ background:#FBEFEC; color:var(--red-deep); }
+  .order-list-status.preparo{ background:#FBF2DD; color:var(--mustard-deep); }
+  .order-list-status.pronto{ background:#E9F3EC; color:var(--green); }
+  .order-list-status.entregue{ background:var(--bg-alt, var(--bg)); color:var(--ink-soft); }
+
+  /* ---- Category tabs ---- */
+  .tabs{
+    display:flex; gap:8px;
+    padding: 16px 16px 6px;
+    overflow-x:auto;
+  }
+  .tab{
+    flex-shrink:0;
+    padding: 9px 16px;
+    border-radius: 20px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .tab.active{
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+  }
+
+  /* ---- Menu list ---- */
+  .menu-list{ padding: 8px 16px 10px; display:flex; flex-direction:column; gap:12px; }
+  .item-card{
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    display:flex; gap:12px;
+    align-items:center;
+  }
+  .item-emoji{
+    width:56px; height:56px; border-radius:10px;
+    background: var(--bg);
+    display:flex; align-items:center; justify-content:center;
+    font-size: 26px;
+    flex-shrink:0;
+  }
+  .item-info{ flex:1; min-width:0; }
+  .item-name{ font-weight:700; font-size:15px; }
+  .item-desc{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
+  .item-bottom{ display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
+  .item-price{ font-family:'IBM Plex Mono', monospace; font-weight:700; font-size:14px; }
+  .add-btn{
+    width:30px; height:30px; border-radius:50%;
+    background: var(--mustard);
+    border:none; color: var(--ink);
+    font-size:18px; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+
+  /* ---- Floating cart bar ---- */
+  .cart-bar{
+    position: fixed;
+    bottom: 0; left:0; right:0;
+    max-width: 430px;
+    margin: 0 auto;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 14px 18px;
+    display:none;
+    align-items:center;
+    justify-content:space-between;
+    border-radius: 16px 16px 0 0;
+    cursor:pointer;
+  }
+  .cart-bar.show{ display:flex; }
+  .cart-bar .left{ font-size:13.5px; }
+  .cart-bar .left b{ font-family:'IBM Plex Mono', monospace; }
+  .cart-bar .right{ font-family:'IBM Plex Mono', monospace; font-weight:700; font-size:15px; }
+
+  /* ---- Sheets (drawer screens) ---- */
+  .sheet{
+    position: fixed; inset:0;
+    max-width: 430px;
+    margin: 0 auto;
+    background: var(--bg);
+    display:none;
+    flex-direction:column;
+    z-index: 20;
+  }
+  .sheet.show{ display:flex; }
+  .sheet-header{
+    background: var(--ink); color:var(--paper);
+    padding: 18px 18px;
+    display:flex; align-items:center; gap:12px;
+  }
+  .sheet-header .back{
+    width:32px; height:32px; border-radius:50%;
+    background: rgba(255,255,255,0.12);
+    border:none; color:var(--paper);
+    font-size:16px; cursor:pointer;
+  }
+  .sheet-header h2{ font-family:'Anton', sans-serif; font-weight:400; font-size:20px; letter-spacing:0.02em; margin:0; }
+  .sheet-body{ flex:1; overflow-y:auto; padding: 16px 18px 20px; }
+  .sheet-footer{ padding: 14px 18px 22px; border-top:1px solid var(--line); background:var(--bg); }
+
+  /* ---- Cart drawer ---- */
+  .cart-item{
+    display:flex; align-items:center; gap:12px;
+    background: var(--paper); border:1px solid var(--line);
+    border-radius: 12px; padding: 12px; margin-bottom:10px;
+  }
+  .cart-item .item-emoji{ width:44px; height:44px; font-size:20px; }
+  .cart-item .info{ flex:1; }
+  .cart-item .name{ font-weight:600; font-size:14px; }
+  .cart-item .price{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--ink-soft); }
+  .stepper{ display:flex; align-items:center; gap:8px; }
+  .stepper button{
+    width:26px; height:26px; border-radius:50%; border:1px solid var(--line);
+    background:var(--bg); font-size:15px; cursor:pointer;
+  }
+  .stepper span{ font-family:'IBM Plex Mono', monospace; font-weight:600; min-width:14px; text-align:center; }
+
+  .totals-row{ display:flex; justify-content:space-between; font-size:14px; margin-bottom:6px; color:var(--ink-soft); }
+  .totals-row.final{ font-weight:700; color:var(--ink); font-size:16px; font-family:'IBM Plex Mono', monospace; margin-top:10px; }
+
+  .primary-btn{
+    width:100%; padding:15px; border:none; border-radius:12px;
+    background: var(--red); color:var(--paper);
+    font-weight:700; font-size:15px; cursor:pointer;
+  }
+  .primary-btn:disabled{ background:#C9BDB3; cursor:not-allowed; }
+
+  /* ---- Order type / payment choices ---- */
+  .choice-group{ display:flex; flex-direction:column; gap:10px; margin-bottom:20px; }
+  .choice-card{
+    display:flex; align-items:center; gap:12px;
+    background: var(--paper); border:1.5px solid var(--line);
+    border-radius: 12px; padding: 14px; cursor:pointer;
+  }
+  .choice-card.selected{ border-color: var(--red); background: #FBEFEC; }
+  .choice-icon{ font-size:22px; }
+  .choice-text .t{ font-weight:700; font-size:14px; }
+  .choice-text .d{ font-size:12px; color:var(--ink-soft); }
+  .section-label{
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px; text-transform:uppercase;
+    letter-spacing:0.08em; color:var(--ink-soft); margin: 4px 0 10px;
+  }
+  .text-input{
+    width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--line);
+    background:var(--paper); font-size:14px; margin-bottom: 14px; font-family:'Inter',sans-serif;
+  }
+
+  /* ---- Pix mock panel ---- */
+  .pix-panel{
+    background: var(--paper); border:1px solid var(--line); border-radius:14px;
+    padding: 18px; text-align:center; margin-top: 6px;
+  }
+  .pix-qr{
+    width:150px; height:150px; margin: 0 auto 12px;
+    background:
+      repeating-linear-gradient(0deg, var(--ink) 0 6px, transparent 6px 12px),
+      repeating-linear-gradient(90deg, var(--ink) 0 6px, transparent 6px 12px);
+    background-blend-mode: multiply;
+    opacity: 0.85;
+    border-radius: 8px;
+  }
+  .pix-code{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft);
+    background: var(--bg); padding: 8px; border-radius:8px; word-break: break-all;
+    margin-bottom: 10px;
+  }
+  .copy-btn{
+    background: var(--green); color:var(--paper); border:none; border-radius:8px;
+    padding: 9px 16px; font-size:13px; font-weight:600; cursor:pointer;
+  }
+
+  /* ---- Confirmation ticket ---- */
+  .ticket{
+    background: var(--paper);
+    border-radius: 4px;
+    padding: 22px 20px 26px;
+    font-family:'IBM Plex Mono', monospace;
+    color: var(--ink);
+    position: relative;
+    box-shadow: 0 6px 18px rgba(43,33,29,0.08);
+  }
+  .ticket::before, .ticket::after{
+    content:"";
+    position:absolute; left:0; right:0; height:10px;
+    background:
+      radial-gradient(circle at 8px 5px, transparent 5px, var(--bg) 5.5px) repeat-x;
+    background-size: 16px 10px;
+  }
+  .ticket::before{ top:-9px; }
+  .ticket::after{ bottom:-9px; transform: scaleY(-1); }
+  .ticket h3{ text-align:center; font-family:'Anton', sans-serif; font-size:18px; margin:0 0 4px; letter-spacing:0.03em; }
+  .ticket .sub{ text-align:center; font-size:11px; color:var(--ink-soft); margin-bottom:16px; }
+  .ticket-row{ display:flex; justify-content:space-between; font-size:12.5px; margin-bottom:5px; }
+  .ticket-line{ border-top: 1px dashed var(--line); margin: 12px 0; }
+  .status-pill{
+    display:inline-block; margin: 16px auto 0; padding: 7px 14px;
+    background: var(--green); color:var(--paper); border-radius:20px;
+    font-size:12px; font-weight:700;
+  }
+  .center{ text-align:center; }
+
+  .tracker{
+    display:flex; align-items:flex-start; justify-content:center;
+    margin-top: 20px; padding-top: 16px;
+  }
+  .tracker-step{ display:flex; flex-direction:column; align-items:center; width:70px; }
+  .tracker-step .dot-step{
+    width:18px; height:18px; border-radius:50%;
+    background: var(--line); border: 2px solid var(--line);
+    transition: all 0.3s;
+  }
+  .tracker-step .step-label{
+    font-size: 10px; text-align:center; margin-top:6px; color: var(--ink-soft);
+    text-transform: uppercase; letter-spacing:0.03em;
+  }
+  .tracker-line{ flex:1; height:2px; background: var(--line); margin-top:9px; }
+  .tracker-step.done .dot-step{ background: var(--green); border-color: var(--green); }
+  .tracker-step.done .step-label{ color: var(--ink); font-weight:700; }
+  .tracker-step.active .dot-step{
+    background: var(--mustard); border-color: var(--mustard);
+    box-shadow: 0 0 0 4px rgba(232,169,59,0.25);
+    animation: dotpulse 1.4s infinite;
+  }
+  .tracker-step.active .step-label{ color: var(--ink); font-weight:700; }
+  @keyframes dotpulse{ 0%,100%{ box-shadow: 0 0 0 4px rgba(232,169,59,0.25);} 50%{ box-shadow: 0 0 0 8px rgba(232,169,59,0.08);} }
+  .tracker-delivered{
+    text-align:center; margin-top:16px; padding: 10px;
+    background: var(--green); color:var(--paper);
+    border-radius: 10px; font-weight:700; font-size: 13px;
+    display:none;
+  }
+  .save-link-box{
+    margin-top: 20px; padding-top:16px; border-top: 1px dashed var(--line);
+    text-align:center;
+  }
+  .save-link-text{ font-size:11.5px; color:var(--ink-soft); margin-bottom:10px; line-height:1.5; }
+
+  .footer-note{
+    margin-top: 26px; font-size:11.5px; color: var(--ink-soft); text-align:center; line-height:1.6;
+  }
+</style>
+</head>
+<body>
+
+<div class="device" id="device">
+
+  <div class="demo-tag">PROTÓTIPO · troque nome, cores e cardápio para cada cliente</div>
+
+  <!-- ===== TELA: CARDÁPIO ===== -->
+  <div id="screen-menu">
+    <div class="topbar">
+      <div class="topbar-row">
+        <div class="logo-mark">🔥</div>
+        <div class="badge" id="access-badge">Mesa 12</div>
+      </div>
+      <div class="restaurant-name">Chapa & Brasa</div>
+      <div class="restaurant-sub">Hambúrgueres artesanais · aberto até 23h</div>
+    </div>
+
+    <div class="my-orders-btn" id="my-orders-btn" onclick="goTo('meus-pedidos')">
+      <span>🧾 Meus pedidos</span>
+      <span class="count-chip" id="my-orders-count">1</span>
+    </div>
+
+    <div class="tabs" id="tabs"></div>
+    <div class="menu-list" id="menu-list"></div>
+  </div>
+
+  <div class="cart-bar" id="cart-bar">
+    <div class="left"><b id="cart-count">0</b> itens na sacola</div>
+    <div class="right" id="cart-total">R$ 0,00</div>
+  </div>
+
+  <!-- ===== SHEET: SACOLA ===== -->
+  <div class="sheet" id="sheet-cart">
+    <div class="sheet-header">
+      <button class="back" onclick="goTo('menu')">←</button>
+      <h2>Sua sacola</h2>
+    </div>
+    <div class="sheet-body" id="cart-items"></div>
+    <div class="sheet-footer">
+      <div class="totals-row"><span>Subtotal</span><span id="cart-subtotal">R$ 0,00</span></div>
+      <div class="totals-row final"><span>Total</span><span id="cart-final">R$ 0,00</span></div>
+      <button class="primary-btn" style="margin-top:12px" onclick="goTo('checkout')">Continuar</button>
+    </div>
+  </div>
+
+  <!-- ===== SHEET: CHECKOUT ===== -->
+  <div class="sheet" id="sheet-checkout">
+    <div class="sheet-header">
+      <button class="back" onclick="goTo('cart')">←</button>
+      <h2>Finalizar pedido</h2>
+    </div>
+    <div class="sheet-body">
+      <div class="section-label">Como vai receber</div>
+      <div class="choice-group" id="order-type-group">
+        <div class="choice-card" data-type="mesa">
+          <div class="choice-icon">🍽️</div>
+          <div class="choice-text"><div class="t">Comer no local</div><div class="d">Pedido vai direto pra sua mesa</div></div>
+        </div>
+        <div class="choice-card" data-type="retirar">
+          <div class="choice-icon">🛍️</div>
+          <div class="choice-text"><div class="t">Retirar no balcão</div><div class="d">Você busca quando ficar pronto</div></div>
+        </div>
+        <div class="choice-card" data-type="entrega">
+          <div class="choice-icon">🛵</div>
+          <div class="choice-text"><div class="t">Entrega</div><div class="d">Receber no endereço</div></div>
+        </div>
+      </div>
+
+      <div id="extra-field-wrap"></div>
+
+      <div class="section-label">Forma de pagamento</div>
+      <div class="choice-group" id="payment-group">
+        <div class="choice-card" data-pay="credito">
+          <div class="choice-icon">💳</div>
+          <div class="choice-text"><div class="t">Cartão de crédito</div><div class="d">Pago pessoalmente na entrega/mesa</div></div>
+        </div>
+        <div class="choice-card" data-pay="debito">
+          <div class="choice-icon">💳</div>
+          <div class="choice-text"><div class="t">Cartão de débito</div><div class="d">Pago pessoalmente na entrega/mesa</div></div>
+        </div>
+        <div class="choice-card" data-pay="pix">
+          <div class="choice-icon">⚡</div>
+          <div class="choice-text"><div class="t">Pix</div><div class="d">Pagar agora, confirmação automática</div></div>
+        </div>
+      </div>
+
+      <div id="pix-wrap" style="display:none">
+        <div class="pix-panel">
+          <div class="pix-qr"></div>
+          <div class="pix-code" id="pix-code">00020126580014BR.GOV.BCB.PIX0136demo-chave-pix-5204000053039865802BR</div>
+          <button class="copy-btn" onclick="copiarPix()">Copiar código Pix</button>
+        </div>
+      </div>
+    </div>
+    <div class="sheet-footer">
+      <button class="primary-btn" id="confirm-btn" disabled onclick="confirmarPedido()">Confirmar pedido</button>
+    </div>
+  </div>
+
+  <!-- ===== SHEET: CONFIRMAÇÃO ===== -->
+  <div class="sheet" id="sheet-confirm">
+    <div class="sheet-header">
+      <button class="back" onclick="reiniciar()">✕</button>
+      <h2>Pedido enviado</h2>
+    </div>
+    <div class="sheet-body">
+      <div class="ticket">
+        <h3>Chapa & Brasa</h3>
+        <div class="sub">Pedido #<span id="order-number">042</span></div>
+        <div id="ticket-items"></div>
+        <div class="ticket-line"></div>
+        <div class="ticket-row"><span>Total</span><span id="ticket-total">R$ 0,00</span></div>
+        <div class="ticket-row"><span>Pagamento</span><span id="ticket-payment">—</span></div>
+        <div class="ticket-row"><span>Entrega</span><span id="ticket-orderType">—</span></div>
+
+        <div class="tracker" id="tracker">
+          <div class="tracker-step" data-step="novo">
+            <div class="dot-step"></div>
+            <div class="step-label">Recebido</div>
+          </div>
+          <div class="tracker-line"></div>
+          <div class="tracker-step" data-step="preparo">
+            <div class="dot-step"></div>
+            <div class="step-label">Em preparo</div>
+          </div>
+          <div class="tracker-line"></div>
+          <div class="tracker-step" data-step="pronto">
+            <div class="dot-step"></div>
+            <div class="step-label">Pronto</div>
+          </div>
+        </div>
+        <div class="tracker-delivered" id="tracker-delivered">✓ Pedido entregue — obrigado!</div>
+
+        <div class="save-link-box">
+          <div class="save-link-text">Salve esse link pra acompanhar seu pedido depois, mesmo se fechar a página:</div>
+          <button class="copy-btn" id="copy-link-btn" onclick="copiarLinkPedido()">Copiar link do pedido</button>
+        </div>
+      </div>
+      <div class="footer-note">Isto é uma simulação de demonstração.<br>Nenhum pagamento real foi processado.</div>
+    </div>
+  </div>
+
+  <!-- ===== SHEET: PEDIDO NÃO ENCONTRADO ===== -->
+  <div class="sheet" id="sheet-notfound">
+    <div class="sheet-header">
+      <button class="back" onclick="reiniciar()">←</button>
+      <h2>Acompanhar pedido</h2>
+    </div>
+    <div class="sheet-body">
+      <p style="color:var(--ink-soft); text-align:center; margin-top:40px; font-size:14px;">
+        Não encontramos esse pedido — ele pode já ter sido entregue ou o link pode estar incorreto.
+      </p>
+      <button class="primary-btn" style="margin-top:16px" onclick="reiniciar()">Ver cardápio</button>
+    </div>
+  </div>
+
+  <!-- ===== SHEET: MEUS PEDIDOS ===== -->
+  <div class="sheet" id="sheet-meus-pedidos">
+    <div class="sheet-header">
+      <button class="back" onclick="goTo('menu')">←</button>
+      <h2>Meus pedidos</h2>
+    </div>
+    <div class="sheet-body">
+      <div id="meus-pedidos-list"></div>
+      <div style="text-align:center; margin: 16px 0 4px; color:var(--ink-soft); font-size:12px; text-decoration:underline; cursor:pointer;" onclick="goTo('buscar')">
+        Não achou seu pedido aqui? Buscar manualmente
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SHEET: BUSCAR POR NÚMERO/MESA (alternativa manual) ===== -->
+  <div class="sheet" id="sheet-buscar">
+    <div class="sheet-header">
+      <button class="back" onclick="goTo('menu')">←</button>
+      <h2>Acompanhar pedido</h2>
+    </div>
+    <div class="sheet-body">
+      <p style="color:var(--ink-soft); font-size:13.5px; margin-top:10px;">
+        Digite o número do pedido que apareceu na sua tela de confirmação (ex: 701).
+      </p>
+      <input class="text-input" id="buscar-numero" inputmode="numeric" placeholder="Número do pedido" style="margin-top:10px" />
+      <button class="primary-btn" onclick="buscarPedidoManual()">Buscar</button>
+
+      <div style="text-align:center; margin: 18px 0 14px; color:var(--ink-soft); font-size:12.5px;">— ou —</div>
+
+      <p style="color:var(--ink-soft); font-size:13.5px;">
+        Não lembra o número? Se você comeu no local, digite o número da sua mesa.
+      </p>
+      <input class="text-input" id="buscar-mesa" inputmode="numeric" placeholder="Número da mesa" />
+      <button class="primary-btn" onclick="buscarPorMesa()">Buscar por mesa</button>
+      <div class="login-error" id="buscar-erro" style="display:none; text-align:center;">Não encontramos pedido nessa mesa.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ============ CONFIGURAÇÃO DO ESTABELECIMENTO (troque por cliente) ============
+  const CARDAPIO = {
+    Burgers: [
+      {emoji:'🍔', nome:'Clássico da Casa', desc:'Pão brioche, carne 180g, queijo, alface, molho da casa', preco:28},
+      {emoji:'🧀', nome:'Duplo Cheddar', desc:'Duas carnes, dobro de cheddar, cebola caramelizada', preco:34},
+      {emoji:'🌶️', nome:'Picante Bacon', desc:'Carne, bacon crocante, jalapeño, molho picante', preco:32},
+    ],
+    Pizzas: [
+      {emoji:'🍕', nome:'Margherita', desc:'Molho de tomate, mussarela de búfala, manjericão', preco:46},
+      {emoji:'🍕', nome:'Calabresa', desc:'Calabresa artesanal, cebola, azeitona', preco:44},
+      {emoji:'🍕', nome:'Quatro Queijos', desc:'Mussarela, gorgonzola, parmesão, provolone', preco:48},
+    ],
+    Bebidas: [
+      {emoji:'🥤', nome:'Refrigerante lata', desc:'350ml, várias opções', preco:7},
+      {emoji:'🍺', nome:'Chopp artesanal', desc:'300ml, receita da casa', preco:14},
+      {emoji:'🧃', nome:'Suco natural', desc:'500ml, fruta da estação', preco:12},
+    ],
+    Sobremesas: [
+      {emoji:'🍰', nome:'Brownie com sorvete', desc:'Brownie quente, sorvete de creme, calda', preco:19},
+      {emoji:'🍮', nome:'Pudim da casa', desc:'Receita tradicional', preco:14},
+    ],
+  };
+  // ================================================================================
+
+  let cart = []; // {nome, preco, emoji, qtd}
+  let orderType = null;
+  let payment = null;
+
+  function fmt(v){ return v.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}); }
+
+  function renderTabs(){
+    const tabsEl = document.getElementById('tabs');
+    tabsEl.innerHTML = '';
+    Object.keys(CARDAPIO).forEach((cat, i) => {
+      const b = document.createElement('div');
+      b.className = 'tab' + (i===0 ? ' active' : '');
+      b.textContent = cat;
+      b.onclick = () => { selectTab(cat); };
+      b.dataset.cat = cat;
+      tabsEl.appendChild(b);
+    });
+  }
+
+  function selectTab(cat){
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.cat === cat));
+    renderMenu(cat);
+  }
+
+  function renderMenu(cat){
+    const list = document.getElementById('menu-list');
+    list.innerHTML = '';
+    CARDAPIO[cat].forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'item-card';
+      card.innerHTML = `
+        <div class="item-emoji">${item.emoji}</div>
+        <div class="item-info">
+          <div class="item-name">${item.nome}</div>
+          <div class="item-desc">${item.desc}</div>
+          <div class="item-bottom">
+            <div class="item-price">${fmt(item.preco)}</div>
+            <button class="add-btn">+</button>
+          </div>
+        </div>`;
+      card.querySelector('.add-btn').onclick = () => addToCart(item);
+      list.appendChild(card);
+    });
+  }
+
+  function addToCart(item){
+    const existing = cart.find(c => c.nome === item.nome);
+    if(existing){ existing.qtd++; }
+    else{ cart.push({...item, qtd:1}); }
+    updateCartBar();
+  }
+
+  function updateCartBar(){
+    const count = cart.reduce((s,c)=>s+c.qtd,0);
+    const total = cart.reduce((s,c)=>s+c.qtd*c.preco,0);
+    const bar = document.getElementById('cart-bar');
+    bar.classList.toggle('show', count>0);
+    document.getElementById('cart-count').textContent = count;
+    document.getElementById('cart-total').textContent = fmt(total);
+  }
+
+  document.getElementById('cart-bar').onclick = () => goTo('cart');
+
+  function renderCart(){
+    const wrap = document.getElementById('cart-items');
+    wrap.innerHTML = '';
+    if(cart.length===0){ wrap.innerHTML = '<p style="color:var(--ink-soft); text-align:center; margin-top:30px;">Sua sacola está vazia.</p>'; }
+    cart.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'cart-item';
+      row.innerHTML = `
+        <div class="item-emoji">${item.emoji}</div>
+        <div class="info">
+          <div class="name">${item.nome}</div>
+          <div class="price">${fmt(item.preco)} un.</div>
+        </div>
+        <div class="stepper">
+          <button data-act="minus">–</button>
+          <span>${item.qtd}</span>
+          <button data-act="plus">+</button>
+        </div>`;
+      row.querySelector('[data-act="minus"]').onclick = () => { item.qtd--; if(item.qtd<=0) cart = cart.filter(c=>c!==item); renderCart(); updateCartBar(); };
+      row.querySelector('[data-act="plus"]').onclick = () => { item.qtd++; renderCart(); updateCartBar(); };
+      wrap.appendChild(row);
+    });
+    const total = cart.reduce((s,c)=>s+c.qtd*c.preco,0);
+    document.getElementById('cart-subtotal').textContent = fmt(total);
+    document.getElementById('cart-final').textContent = fmt(total);
+  }
+
+  // ---- Checkout: order type ----
+  document.querySelectorAll('#order-type-group .choice-card').forEach(card => {
+    card.onclick = () => {
+      document.querySelectorAll('#order-type-group .choice-card').forEach(c=>c.classList.remove('selected'));
+      card.classList.add('selected');
+      orderType = card.dataset.type;
+      renderExtraField();
+      checkConfirmEnabled();
+    };
+  });
+
+  function renderExtraField(){
+    const wrap = document.getElementById('extra-field-wrap');
+    if(orderType === 'entrega'){
+      wrap.innerHTML = `<input class="text-input" id="endereco" placeholder="Endereço de entrega" />`;
+    } else if(orderType === 'mesa'){
+      wrap.innerHTML = `<input class="text-input" id="mesa" placeholder="Número da mesa" value="12" />`;
+    } else {
+      wrap.innerHTML = '';
+    }
+  }
+
+  // ---- Checkout: payment ----
+  document.querySelectorAll('#payment-group .choice-card').forEach(card => {
+    card.onclick = () => {
+      document.querySelectorAll('#payment-group .choice-card').forEach(c=>c.classList.remove('selected'));
+      card.classList.add('selected');
+      payment = card.dataset.pay;
+      document.getElementById('pix-wrap').style.display = (payment === 'pix') ? 'block' : 'none';
+      checkConfirmEnabled();
+    };
+  });
+
+  function checkConfirmEnabled(){
+    document.getElementById('confirm-btn').disabled = !(orderType && payment);
+  }
+
+  function copiarPix(){
+    const code = document.getElementById('pix-code').textContent;
+    navigator.clipboard?.writeText(code);
+    const btn = event.target;
+    const old = btn.textContent;
+    btn.textContent = 'Copiado!';
+    setTimeout(()=>btn.textContent = old, 1500);
+  }
+
+  // ============ CONFIGURAÇÃO DO FIREBASE (preencha com os dados do SEU projeto) ============
+  // Pegue esses valores em: console.firebase.google.com > Configurações do projeto > Seus apps
+  const firebaseConfig = {
+    apiKey: "AIzaSyBCGDceKCqqrnTDPrjkZciC8G8rcFgXej8",
+    authDomain: "cardapio-digital-7f142.firebaseapp.com",
+    databaseURL: "https://cardapio-digital-7f142-default-rtdb.firebaseio.com",
+    projectId: "cardapio-digital-7f142",
+  };
+  let db = null;
+  try{
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+  }catch(e){
+    console.error('Firebase não inicializou — o cardápio funciona, mas pedidos não vão pra cozinha:', e);
+  }
+  // ================================================================================
+
+  const RESTAURANTE_ID = 'chapa-brasa-demo'; // troque por um id único por cliente/restaurante
+
+  async function confirmarPedido(){
+    const total = cart.reduce((s,c)=>s+c.qtd*c.preco,0);
+    const numero = String(Math.floor(Math.random()*900+100));
+    document.getElementById('order-number').textContent = numero;
+    const ticketItems = document.getElementById('ticket-items');
+    ticketItems.innerHTML = cart.map(c => `<div class="ticket-row"><span>${c.qtd}x ${c.nome}</span><span>${fmt(c.qtd*c.preco)}</span></div>`).join('');
+    document.getElementById('ticket-total').textContent = fmt(total);
+    const payLabel = {credito:'Cartão de crédito', debito:'Cartão de débito', pix:'Pix'}[payment];
+    document.getElementById('ticket-payment').textContent = payLabel + (payment==='pix' ? ' · pago' : ' · na entrega');
+    const typeLabel = {mesa:'Mesa', retirar:'Retirada no balcão', entrega:'Entrega'}[orderType];
+    document.getElementById('ticket-orderType').textContent = typeLabel;
+
+    const local = orderType === 'mesa' ? (document.getElementById('mesa')?.value || '—')
+                : orderType === 'entrega' ? (document.getElementById('endereco')?.value || '—')
+                : '—';
+
+    const pedido = {
+      numero,
+      itens: cart.map(c => ({nome:c.nome, qtd:c.qtd, preco:c.preco})),
+      total,
+      tipoEntrega: orderType,
+      local,
+      pagamento: payment,
+      pagoAgora: payment === 'pix',
+      status: 'novo',
+      criadoEm: Date.now(),
+    };
+
+    try{
+      if(!db) throw new Error('Firebase não conectado');
+      await db.ref('pedidos/' + RESTAURANTE_ID + '/' + numero).set(pedido);
+      if(orderType === 'mesa' && local && local !== '—'){
+        await db.ref('mesaAtual/' + RESTAURANTE_ID + '/' + local).set(numero);
+      }
+      escutarStatus(numero);
+      adicionarPedidoLocal(numero);
+      atualizarBotaoMeusPedidos();
+      history.replaceState(null, '', '?pedido=' + numero);
+    }catch(e){
+      console.error('Não foi possível enviar o pedido para a cozinha:', e);
+      alert('Não foi possível enviar o pedido. Verifique a configuração do Firebase.');
+    }
+
+    goTo('confirm');
+  }
+
+  function copiarLinkPedido(){
+    const url = location.href;
+    navigator.clipboard?.writeText(url);
+    const btn = document.getElementById('copy-link-btn');
+    const old = btn.textContent;
+    btn.textContent = 'Link copiado!';
+    setTimeout(()=>btn.textContent = old, 1500);
+  }
+
+  // ---- Lembrar os pedidos recentes no navegador do cliente (funciona só fora do preview do Claude) ----
+  const CHAVE_LOCAL = 'meusPedidos_' + 'chapa-brasa-demo';
+  const MAX_PEDIDOS_SALVOS = 5;
+
+  function lerPedidosLocais(){
+    try{
+      const raw = localStorage.getItem(CHAVE_LOCAL);
+      return raw ? JSON.parse(raw) : [];
+    }catch(e){ return []; }
+  }
+  function adicionarPedidoLocal(numero){
+    try{
+      let lista = lerPedidosLocais().filter(n => n !== numero);
+      lista.unshift(numero); // mais recente primeiro
+      lista = lista.slice(0, MAX_PEDIDOS_SALVOS);
+      localStorage.setItem(CHAVE_LOCAL, JSON.stringify(lista));
+    }catch(e){ /* navegador pode bloquear, sem problema — só não vai ter a lista salva */ }
+  }
+
+  function atualizarBotaoMeusPedidos(){
+    const lista = lerPedidosLocais();
+    const btn = document.getElementById('my-orders-btn');
+    if(lista.length > 0){
+      btn.style.display = 'flex';
+      document.getElementById('my-orders-count').textContent = lista.length;
+    } else {
+      btn.style.display = 'none';
+    }
+  }
+
+  async function renderMeusPedidos(){
+    const container = document.getElementById('meus-pedidos-list');
+    const lista = lerPedidosLocais();
+    if(lista.length === 0){
+      container.innerHTML = '<p style="color:var(--ink-soft); text-align:center; margin-top:30px; font-size:13.5px;">Você ainda não tem pedidos por aqui.</p>';
+      return;
+    }
+    container.innerHTML = '<p style="color:var(--ink-soft); text-align:center; margin:20px 0; font-size:12.5px;">Carregando…</p>';
+
+    const statusLabel = {novo:'Recebido', preparo:'Em preparo', pronto:'Pronto', entregue:'Entregue'};
+    const cards = [];
+    for(const numero of lista){
+      let statusKey = 'entregue';
+      let total = null;
+      if(db){
+        try{
+          const snap = await db.ref('pedidos/' + RESTAURANTE_ID + '/' + numero).once('value');
+          const pedido = snap.val();
+          if(pedido){ statusKey = pedido.status; total = pedido.total; }
+        }catch(e){ /* mantém como 'entregue' se não achar */ }
+      }
+      cards.push(`
+        <div class="order-list-card" onclick="history.replaceState(null,'','?pedido=${numero}'); abrirPedidoPorLink('${numero}')">
+          <div>
+            <div class="num">Pedido #${numero}</div>
+            <div class="when">${total !== null ? fmt(total) : ''}</div>
+          </div>
+          <span class="order-list-status ${statusKey}">${statusLabel[statusKey] || 'Entregue'}</span>
+        </div>
+      `);
+    }
+    container.innerHTML = cards.join('');
+  }
+
+  function buscarPedidoManual(){
+    const numero = document.getElementById('buscar-numero').value.trim();
+    if(!numero) return;
+    history.replaceState(null, '', '?pedido=' + numero);
+    abrirPedidoPorLink(numero);
+  }
+
+  async function buscarPorMesa(){
+    const mesa = document.getElementById('buscar-mesa').value.trim();
+    const erro = document.getElementById('buscar-erro');
+    erro.style.display = 'none';
+    if(!mesa || !db) return;
+    try{
+      const snap = await db.ref('mesaAtual/' + RESTAURANTE_ID + '/' + mesa).once('value');
+      const numero = snap.val();
+      if(!numero){ erro.style.display = 'block'; return; }
+      history.replaceState(null, '', '?pedido=' + numero);
+      abrirPedidoPorLink(numero);
+    }catch(e){
+      console.error('Erro ao buscar por mesa:', e);
+      erro.style.display = 'block';
+    }
+  }
+
+  let statusRef = null;
+  const ORDEM_STATUS = ['novo', 'preparo', 'pronto'];
+
+  function preencherTicket(numero, pedido){
+    document.getElementById('order-number').textContent = numero;
+    document.getElementById('ticket-items').innerHTML = pedido.itens.map(i => `<div class="ticket-row"><span>${i.qtd}x ${i.nome}</span><span>${fmt(i.qtd*i.preco)}</span></div>`).join('');
+    document.getElementById('ticket-total').textContent = fmt(pedido.total);
+    const payLabel = {credito:'Cartão de crédito', debito:'Cartão de débito', pix:'Pix'}[pedido.pagamento];
+    document.getElementById('ticket-payment').textContent = payLabel + (pedido.pagoAgora ? ' · pago' : ' · na entrega');
+    const typeLabel = {mesa:'Mesa', retirar:'Retirada no balcão', entrega:'Entrega'}[pedido.tipoEntrega];
+    document.getElementById('ticket-orderType').textContent = typeLabel;
+  }
+
+  // Abre o acompanhamento de um pedido já existente (usado quando o cliente
+  // volta por um link salvo, tipo cardapio-demo.html?pedido=701)
+  async function abrirPedidoPorLink(numero){
+    if(!db){ goTo('notfound'); return; }
+    try{
+      const snap = await db.ref('pedidos/' + RESTAURANTE_ID + '/' + numero).once('value');
+      const pedido = snap.val();
+      if(!pedido){ goTo('notfound'); return; }
+      preencherTicket(numero, pedido);
+      escutarStatus(numero);
+      adicionarPedidoLocal(numero);
+      atualizarBotaoMeusPedidos();
+      goTo('confirm');
+    }catch(e){
+      console.error('Erro ao carregar pedido pelo link:', e);
+      goTo('notfound');
+    }
+  }
+
+  function escutarStatus(numero){
+    if(!db) return;
+    if(statusRef) statusRef.off(); // para de escutar o pedido anterior, se houver
+
+    statusRef = db.ref('pedidos/' + RESTAURANTE_ID + '/' + numero);
+    statusRef.on('value', snapshot => {
+      const pedido = snapshot.val();
+      const tracker = document.getElementById('tracker');
+      const delivered = document.getElementById('tracker-delivered');
+
+      if(!pedido){
+        // registro sumiu do banco = cozinha marcou como entregue
+        tracker.style.display = 'none';
+        delivered.style.display = 'block';
+        return;
+      }
+
+      tracker.style.display = 'flex';
+      delivered.style.display = 'none';
+      const idxAtual = ORDEM_STATUS.indexOf(pedido.status);
+
+      document.querySelectorAll('.tracker-step').forEach(el => {
+        const idx = ORDEM_STATUS.indexOf(el.dataset.step);
+        el.classList.remove('done', 'active');
+        if(idx < idxAtual) el.classList.add('done');
+        else if(idx === idxAtual) el.classList.add('active');
+      });
+    });
+  }
+
+  function reiniciar(){
+    if(statusRef){ statusRef.off(); statusRef = null; }
+    cart = []; orderType = null; payment = null;
+    document.querySelectorAll('.choice-card').forEach(c=>c.classList.remove('selected'));
+    document.getElementById('pix-wrap').style.display = 'none';
+    document.getElementById('extra-field-wrap').innerHTML = '';
+    checkConfirmEnabled();
+    updateCartBar();
+    history.replaceState(null, '', location.pathname);
+    goTo('menu');
+  }
+
+  // ---- Navigation ----
+  function goTo(screen){
+    document.getElementById('sheet-cart').classList.remove('show');
+    document.getElementById('sheet-checkout').classList.remove('show');
+    document.getElementById('sheet-confirm').classList.remove('show');
+    document.getElementById('sheet-notfound').classList.remove('show');
+    document.getElementById('sheet-buscar').classList.remove('show');
+    document.getElementById('sheet-meus-pedidos').classList.remove('show');
+    if(screen === 'cart'){ renderCart(); document.getElementById('sheet-cart').classList.add('show'); }
+    else if(screen === 'checkout'){ document.getElementById('sheet-checkout').classList.add('show'); }
+    else if(screen === 'confirm'){ document.getElementById('sheet-confirm').classList.add('show'); }
+    else if(screen === 'notfound'){ document.getElementById('sheet-notfound').classList.add('show'); }
+    else if(screen === 'buscar'){ document.getElementById('sheet-buscar').classList.add('show'); }
+    else if(screen === 'meus-pedidos'){ renderMeusPedidos(); document.getElementById('sheet-meus-pedidos').classList.add('show'); }
+    // 'menu' -> nothing to show, base screen is already there
+  }
+
+  renderTabs();
+  renderMenu(Object.keys(CARDAPIO)[0]);
+
+  // Se a página foi aberta com ?pedido=NUMERO (link salvo pelo cliente),
+  // pula direto pro acompanhamento em vez de mostrar o cardápio.
+  const numeroNaUrl = new URLSearchParams(location.search).get('pedido');
+  if(numeroNaUrl){
+    abrirPedidoPorLink(numeroNaUrl);
+  }
+  atualizarBotaoMeusPedidos();
+</script>
+</body>
+</html>
