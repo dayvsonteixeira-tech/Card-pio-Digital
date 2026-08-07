@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Painel da Cozinha — Chapa & Brasa</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+
+<!-- Firebase (necessário pra ver os pedidos ao vivo) -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+
+<style>
+  :root{
+    --bg: #1E1B19;
+    --panel: #272220;
+    --line: #3A342F;
+    --ink: #F5F0E8;
+    --ink-soft: #A99E92;
+    --red: #C2493C;
+    --mustard: #E8A93B;
+    --green: #5C9270;
+    --blue: #5B84A8;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: var(--bg);
+    color: var(--ink);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+  }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 18px 26px;
+    border-bottom: 1px solid var(--line);
+  }
+  .title{
+    font-family:'Anton', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.02em;
+  }
+  .title span{ color: var(--mustard); }
+  .status-line{
+    display:flex; align-items:center; gap:8px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .dot{
+    width:8px; height:8px; border-radius:50%;
+    background: var(--green);
+    animation: pulse 1.6s infinite;
+  }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+
+  .board{
+    display:grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    padding: 22px;
+    align-items: start;
+  }
+  .column{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    min-height: 200px;
+  }
+  .column-head{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .column-head h3{
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    margin:0;
+  }
+  .col-novo h3{ color: var(--red); }
+  .col-preparo h3{ color: var(--mustard); }
+  .col-pronto h3{ color: var(--green); }
+  .count-badge{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12px;
+    background: var(--bg);
+    padding: 3px 9px;
+    border-radius: 20px;
+    color: var(--ink-soft);
+  }
+
+  .empty-msg{
+    color: var(--ink-soft);
+    font-size: 12.5px;
+    text-align:center;
+    padding: 30px 10px;
+  }
+
+  .order-card{
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+    animation: enter 0.35s ease;
+  }
+  @keyframes enter{ from{ opacity:0; transform: translateY(-6px);} to{opacity:1; transform:translateY(0);} }
+  .order-card.novo{ border-left: 3px solid var(--red); }
+  .order-card.preparo{ border-left: 3px solid var(--mustard); }
+  .order-card.pronto{ border-left: 3px solid var(--green); }
+
+  .order-top{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom: 8px;
+  }
+  .order-num{
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:700; font-size: 15px;
+  }
+  .order-time{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+  }
+  .order-meta{
+    display:flex; gap:6px; flex-wrap:wrap;
+    margin-bottom: 10px;
+  }
+  .tag{
+    font-size: 10.5px;
+    font-family:'IBM Plex Mono', monospace;
+    padding: 3px 8px;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.06);
+    color: var(--ink-soft);
+  }
+  .tag.pago{ color: var(--green); }
+  .tag.pendente{ color: var(--mustard); }
+
+  .order-items{
+    font-size: 13px;
+    line-height: 1.6;
+    margin-bottom: 12px;
+  }
+  .order-items div{ display:flex; justify-content:space-between; gap:8px; }
+  .order-items .qtd{ color: var(--mustard); font-family:'IBM Plex Mono', monospace; margin-right:6px; }
+
+  .order-actions{ display:flex; gap:8px; }
+  .order-actions button{
+    flex:1;
+    padding: 9px 0;
+    border: none;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .btn-avancar{ background: var(--mustard); color:#1E1B19; }
+  .btn-pronto{ background: var(--green); color:#F5F0E8; }
+  .btn-entregar{ background: var(--blue); color:#F5F0E8; }
+
+  .empty-state{
+    text-align:center;
+    color: var(--ink-soft);
+    padding: 60px 20px;
+    font-size: 13px;
+  }
+
+  @media (max-width: 860px){
+    .board{ grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">Painel da <span>Cozinha</span></div>
+  <div class="status-line"><span class="dot"></span> ao vivo · tempo real</div>
+</header>
+
+<div class="board">
+  <div class="column col-novo">
+    <div class="column-head"><h3>Novo pedido</h3><span class="count-badge" id="count-novo">0</span></div>
+    <div id="col-novo"></div>
+  </div>
+  <div class="column col-preparo">
+    <div class="column-head"><h3>Em preparo</h3><span class="count-badge" id="count-preparo">0</span></div>
+    <div id="col-preparo"></div>
+  </div>
+  <div class="column col-pronto">
+    <div class="column-head"><h3>Pronto</h3><span class="count-badge" id="count-pronto">0</span></div>
+    <div id="col-pronto"></div>
+  </div>
+</div>
+
+<script>
+  // ============ CONFIGURAÇÃO DO FIREBASE (preencha com os dados do SEU projeto) ============
+  // IMPORTANTE: use exatamente o mesmo firebaseConfig e o mesmo RESTAURANTE_ID do cardapio-demo.html
+  const firebaseConfig = {
+    apiKey: "AIzaSyBCGDceKCqqrnTDPrjkZciC8G8rcFgXej8",
+    authDomain: "cardapio-digital-7f142.firebaseapp.com",
+    databaseURL: "https://cardapio-digital-7f142-default-rtdb.firebaseio.com",
+    projectId: "cardapio-digital-7f142",
+  };
+  let db = null;
+  try{
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+  }catch(e){
+    console.error('Firebase não inicializou:', e);
+  }
+  // ================================================================================
+
+  const RESTAURANTE_ID = 'chapa-brasa-demo'; // deve ser igual ao usado no app do cardápio
+
+  const payLabels = {credito:'Crédito', debito:'Débito', pix:'Pix'};
+  const typeLabels = {mesa:'Mesa', retirar:'Retirada', entrega:'Entrega'};
+
+  function tempoDecorrido(ts){
+    const min = Math.floor((Date.now() - ts) / 60000);
+    if(min < 1) return 'agora';
+    return min + ' min';
+  }
+
+  function renderCard(pedido){
+    const div = document.createElement('div');
+    div.className = 'order-card ' + pedido.status;
+    const itensHtml = pedido.itens.map(i =>
+      `<div><span><span class="qtd">${i.qtd}x</span>${i.nome}</span></div>`
+    ).join('');
+
+    const payTagClass = pedido.pagoAgora ? 'pago' : 'pendente';
+    const payTagText = payLabels[pedido.pagamento] + (pedido.pagoAgora ? ' · pago' : ' · na entrega');
+
+    let actionsHtml = '';
+    if(pedido.status === 'novo'){
+      actionsHtml = `<button class="btn-avancar" data-action="preparo">Iniciar preparo</button>`;
+    } else if(pedido.status === 'preparo'){
+      actionsHtml = `<button class="btn-pronto" data-action="pronto">Marcar pronto</button>`;
+    } else if(pedido.status === 'pronto'){
+      actionsHtml = `<button class="btn-entregar" data-action="entregue">${pedido.tipoEntrega === 'mesa' ? 'Entregue na mesa' : 'Entregue'}</button>`;
+    }
+
+    div.innerHTML = `
+      <div class="order-top">
+        <div class="order-num">#${pedido.numero}</div>
+        <div class="order-time">${tempoDecorrido(pedido.criadoEm)}</div>
+      </div>
+      <div class="order-meta">
+        <span class="tag">${typeLabels[pedido.tipoEntrega]}${pedido.local && pedido.local !== '—' ? ' · ' + pedido.local : ''}</span>
+        <span class="tag ${payTagClass}">${payTagText}</span>
+      </div>
+      <div class="order-items">${itensHtml}</div>
+      <div class="order-actions">${actionsHtml}</div>
+    `;
+
+    const btn = div.querySelector('button[data-action]');
+    if(btn){
+      btn.onclick = () => avancarStatus(pedido, btn.dataset.action);
+    }
+    return div;
+  }
+
+  async function avancarStatus(pedido, novoStatus){
+    pedido.status = novoStatus;
+    try{
+      if(novoStatus === 'entregue'){
+        await db.ref('pedidos/' + RESTAURANTE_ID + '/' + pedido.numero).remove();
+      } else {
+        await db.ref('pedidos/' + RESTAURANTE_ID + '/' + pedido.numero).set(pedido);
+      }
+    }catch(e){ console.error('Erro ao atualizar pedido:', e); }
+    // não precisa recarregar manualmente — o listener 'value' abaixo atualiza sozinho
+  }
+
+  function renderPedidos(pedidos){
+    pedidos.sort((a,b) => a.criadoEm - b.criadoEm);
+
+    const cols = { novo: document.getElementById('col-novo'), preparo: document.getElementById('col-preparo'), pronto: document.getElementById('col-pronto') };
+    Object.values(cols).forEach(c => c.innerHTML = '');
+
+    const counts = { novo:0, preparo:0, pronto:0 };
+    pedidos.forEach(p => {
+      if(!cols[p.status]) return;
+      cols[p.status].appendChild(renderCard(p));
+      counts[p.status]++;
+    });
+
+    document.getElementById('count-novo').textContent = counts.novo;
+    document.getElementById('count-preparo').textContent = counts.preparo;
+    document.getElementById('count-pronto').textContent = counts.pronto;
+
+    Object.entries(cols).forEach(([status, el]) => {
+      if(counts[status] === 0){
+        el.innerHTML = '<div class="empty-msg">Nenhum pedido</div>';
+      }
+    });
+  }
+
+  if(db){
+    // Escuta o banco em tempo real: qualquer pedido novo, alterado ou removido
+    // atualiza o painel na hora, sem precisar recarregar a página.
+    db.ref('pedidos/' + RESTAURANTE_ID).on('value', snapshot => {
+      const data = snapshot.val() || {};
+      renderPedidos(Object.values(data));
+    }, error => {
+      console.error('Erro ao conectar no Firebase:', error);
+    });
+
+    // Atualiza o "há X min" mesmo sem chegar pedido novo
+    setInterval(() => {
+      db.ref('pedidos/' + RESTAURANTE_ID).once('value').then(snapshot => {
+        renderPedidos(Object.values(snapshot.val() || {}));
+      });
+    }, 30000);
+  } else {
+    document.querySelector('.status-line').textContent = '⚠ Firebase não conectado — veja o console (F12)';
+  }
+</script>
+</body>
+</html>
